@@ -393,7 +393,7 @@ class CAR(Platforms):
   )
   HYUNDAI_IONIQ_5_2026 = HyundaiCanFDPlatformConfig(
     [
-      HyundaiCarDocs("Hyundai Ioniq 5 Limited AWD 2026", "Highway Driving Assist II", car_parts=CarParts.common([CarHarness.hyundai_k])),
+      HyundaiCarDocs("Hyundai Ioniq 5 Limited AWD 2026", "Highway Driving Assist II", car_parts=CarParts.common([CarHarness.hyundai_q])),
     ],
     CarSpecs(mass=2180, wheelbase=3.00, steerRatio=14.26, tireStiffnessFactor=0.65),
     flags=HyundaiFlags.EV,
