@@ -68,6 +68,7 @@ class HyundaiSafetyFlags(IntFlag):
   CANFD_LKA_STEER_MSG_ALT = 128
   FCEV_GAS = 256
   ALT_LIMITS_2 = 512
+  CCNC = 1024
 
 
 # Hyundai/Kia/Genesis SCC (Smart Cruise Control) and steering architecture:
@@ -148,6 +149,8 @@ class HyundaiFlags(IntFlag):
   FCEV = 2 ** 25
 
   ALT_LIMITS_2 = 2 ** 26
+
+  CCNC = 2 ** 27
 
 
 @dataclass
@@ -396,7 +399,7 @@ class CAR(Platforms):
       HyundaiCarDocs("Hyundai Ioniq 5 Limited AWD 2026", "Highway Driving Assist II", car_parts=CarParts.common([CarHarness.hyundai_q])),
     ],
     CarSpecs(mass=2180, wheelbase=3.00, steerRatio=14.26, tireStiffnessFactor=0.65),
-    flags=HyundaiFlags.EV,
+    flags=HyundaiFlags.EV | HyundaiFlags.CCNC,
   )
   HYUNDAI_TUCSON_4TH_GEN = HyundaiCanFDPlatformConfig(
     [
