@@ -143,11 +143,11 @@ def create_ccnc(packer, CAN, openpilot_longitudinal_control, enabled, hud, left_
   any_blinker = left_blinker or right_blinker
   curvature = {i: (31 if i == -1 else 13 - abs(i + 15)) if i < 0 else 15 + i for i in range(-15, 16)}
 
+  # Preserve the car's own 0x161 icon baseline (LKA_ICON/HDA_ICON/DAW_ICON/LFA_ICON/CENTERLINE)
+  # instead of forcing contradictory values that fault the car's driver-assistance suite. Now that
+  # the parser populates vl from the wire (see get_can_parsers_canfd), msg_161 carries the car's
+  # real values; we only overlay the lane-geometry fields below.
   msg_161.update({
-    "DAW_ICON": 0,
-    "LKA_ICON": 0,
-    "LFA_ICON": 2 if lfa_icon else 0,
-    "CENTERLINE": 1 if lfa_icon else 0,
     "LANELINE_CURVATURE": curvature[max(-15, min(int(out.steeringAngleDeg / 4.5), 15))] if lfa_icon and not any_blinker else 15,
     "LANELINE_LEFT": (0 if not lfa_icon else 1 if not hud.leftLaneVisible else 4 if hud.leftLaneDepart else 6 if any_blinker else 2),
     "LANELINE_RIGHT": (0 if not lfa_icon else 1 if not hud.rightLaneVisible else 4 if hud.rightLaneDepart else 6 if any_blinker else 2),

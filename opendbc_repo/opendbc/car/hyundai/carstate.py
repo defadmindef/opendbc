@@ -321,6 +321,10 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
 
   def get_can_parsers_canfd(self, CP):
     msgs = []
+    if CP.flags & HyundaiFlags.CCNC:
+      # ccNC cluster msgs MUST be in the parser list or vl stays all-zero -> we TX garbage
+      # 0x161/0x162 (no counter/checksum) which faults the car's driver-assistance suite.
+      msgs += [("CCNC_0x161", 20), ("CCNC_0x162", 20), ("FR_CMR_03_50ms", 20)]
     if not (CP.flags & HyundaiFlags.CANFD_ALT_BUTTONS):
       # TODO: this can be removed once we add dynamic support to vl_all
       msgs += [
