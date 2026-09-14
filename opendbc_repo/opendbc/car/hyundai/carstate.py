@@ -264,7 +264,15 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
       # ccNC pass-through msgs MUST be copied for ALL ccNC cars, including LKA-steering.
       # (An earlier `not CANFD_LKA_STEER_MSG` gate here skipped the copy for our car ->
       # msg_161/162/1b5 stayed {} -> create_ccnc transmitted all-zero 0x161 -> ADAS fault.)
-      self.msg_161, self.msg_162, self.msg_1b5 = map(copy.copy, (cp_cam.vl["CCNC_0x161"], cp_cam.vl["CCNC_0x162"], cp_cam.vl["FR_CMR_03_50ms"]))
+      # The car's 0x161 may arrive on a different bus than cp_cam (Bus.cam), so read from
+      # whichever parser actually captured it (non-zero payload), else vl stays all-zero.
+      def _ccnc_vl(name):
+        for p in (cp_cam, cp):
+          v = p.vl[name]
+          if any(x != 0 for x in v.values()):
+            return copy.copy(v)
+        return copy.copy(cp_cam.vl[name])
+      self.msg_161, self.msg_162, self.msg_1b5 = _ccnc_vl("CCNC_0x161"), _ccnc_vl("CCNC_0x162"), _ccnc_vl("FR_CMR_03_50ms")
       if not self.CP.flags & HyundaiFlags.CANFD_LKA_STEER_MSG:
         self.cruise_info = copy.copy((cp_cam if self.CP.flags & HyundaiFlags.CANFD_CAMERA_SCC else cp).vl["SCC_CONTROL"])
     ret.leftBlinker, ret.rightBlinker = self.update_blinker_from_lamp(50, cp.vl["BLINKERS"][left_blinker_sig],
@@ -334,9 +342,13 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
         # this message is 50Hz but the ECU frequently stops transmitting for ~0.5s
         ("CRUISE_BUTTONS", 1)
       ]
+    # ccNC pass-through msgs (0x161/0x162/0x1b5) must be in the parser list on WHICHEVER bus the
+    # car transmits them on. For LKA-steering ccNC cars the car's 0x161 arrives on a different bus
+    # than cp_cam (Bus.cam), so we register them in BOTH parsers; the copy picks the non-zero one.
+    ccnc_msgs = [("CCNC_0x161", 20), ("CCNC_0x162", 20), ("FR_CMR_03_50ms", 20)] if (CP.flags & HyundaiFlags.CCNC) else []
     return {
-      Bus.pt: CANParser(DBC[CP.carFingerprint][Bus.pt], msgs, CanBus(CP).ECAN),
-      Bus.cam: CANParser(DBC[CP.carFingerprint][Bus.pt], [], CanBus(CP).CAM),
+      Bus.pt: CANParser(DBC[CP.carFingerprint][Bus.pt], msgs + ccnc_msgs, CanBus(CP).ECAN),
+      Bus.cam: CANParser(DBC[CP.carFingerprint][Bus.pt], ccnc_msgs, CanBus(CP).CAM),
     }
 
   def get_can_parsers(self, CP, CP_SP):
