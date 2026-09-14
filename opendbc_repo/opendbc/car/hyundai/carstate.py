@@ -342,12 +342,14 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
         # this message is 50Hz but the ECU frequently stops transmitting for ~0.5s
         ("CRUISE_BUTTONS", 1)
       ]
-    # ccNC pass-through msgs (0x161/0x162/0x1b5) must be in the parser list on WHICHEVER bus the
-    # car transmits them on. For LKA-steering ccNC cars the car's 0x161 arrives on a different bus
-    # than cp_cam (Bus.cam), so we register them in BOTH parsers; the copy picks the non-zero one.
+    # ccNC pass-through msgs (0x161/0x162/0x1b5): the car transmits these on ECAN (Bus.pt) —
+    # confirmed from in-car logs (src=1) and by the live parser. They are already in `msgs`
+    # above, so Bus.pt must NOT list them again (CANParser rejects duplicate addresses:
+    # "Duplicate Message Check: 353"). The cam parser also registers them so the _ccnc_vl
+    # fallback in update() can read cp_cam.vl[...] without KeyError (it will be all-zero there).
     ccnc_msgs = [("CCNC_0x161", 20), ("CCNC_0x162", 20), ("FR_CMR_03_50ms", 20)] if (CP.flags & HyundaiFlags.CCNC) else []
     return {
-      Bus.pt: CANParser(DBC[CP.carFingerprint][Bus.pt], msgs + ccnc_msgs, CanBus(CP).ECAN),
+      Bus.pt: CANParser(DBC[CP.carFingerprint][Bus.pt], msgs, CanBus(CP).ECAN),
       Bus.cam: CANParser(DBC[CP.carFingerprint][Bus.pt], ccnc_msgs, CanBus(CP).CAM),
     }
 
