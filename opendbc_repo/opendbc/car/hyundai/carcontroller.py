@@ -1,3 +1,5 @@
+import traceback
+
 import numpy as np
 from opendbc.can import CANPacker
 from opendbc.car import Bus, DT_CTRL, make_tester_present_msg, structs
@@ -218,9 +220,16 @@ class CarController(CarControllerBase, EsccCarController, LeadDataCarController,
     # create_ccnc never runs (0x161/0x162/0x1b5 TX=0, and 0x362 LFA-suppress is sent instead).
     if self.frame % 5 == 0 and (is_ccnc or not lka_steering or lka_steering_long):
       if is_ccnc:
-        can_sends.extend(hyundaicanfd.create_ccnc(self.packer, self.CAN, self.CP.openpilotLongitudinalControl, CC.enabled, CC.hudControl, CC.leftBlinker,
-                                                  CC.rightBlinker, CS.msg_161, CS.msg_162, CS.msg_1b5, CS.is_metric, CS.out, CS.main_cruise_enabled,
-                                                  self.lfa_icon))
+        # A ccNC bug must never kill the card daemon — steering (0x110) has to survive.
+        # (A KeyError here previously crashed card, killing ALL CAN output.)
+        try:
+          can_sends.extend(hyundaicanfd.create_ccnc(self.packer, self.CAN, self.CP.openpilotLongitudinalControl, CC.enabled, CC.hudControl, CC.leftBlinker,
+                                                    CC.rightBlinker, CS.msg_161, CS.msg_162, CS.msg_1b5, CS.is_metric, CS.out, CS.main_cruise_enabled,
+                                                    self.lfa_icon))
+        except Exception as e:
+          if not hasattr(self, '_ccnc_err_logged'):
+            self._ccnc_err_logged = True
+            print(f"[card] create_ccnc failed (ccNC disabled, steering continues): {e!r}\n{traceback.format_exc()}", flush=True)
       else:
         can_sends.append(hyundaicanfd.create_lfahda_cluster(self.packer, self.CAN, CC.enabled, self.lfa_icon))
 
