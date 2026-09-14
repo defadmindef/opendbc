@@ -200,19 +200,24 @@ class CarController(CarControllerBase, EsccCarController, LeadDataCarController,
 
     lka_steering = self.CP.flags & HyundaiFlags.CANFD_LKA_STEER_MSG
     lka_steering_long = lka_steering and self.CP.openpilotLongitudinalControl
+    is_ccnc = bool(self.CP.flags & HyundaiFlags.CCNC)
     ccnc_non_hda2 = self.CP.flags & HyundaiFlags.CCNC and not lka_steering
 
     # steering control
     can_sends.extend(hyundaicanfd.create_steering_messages(self.packer, self.CP, self.CAN, CC.enabled, apply_steer_req, apply_torque, self.lkas_icon))
 
     # prevent LFA from activating on LKA steering cars by sending "no lane lines detected" to ADAS ECU
-    if self.frame % 5 == 0 and lka_steering:
+    # (ccNC cars drive LFA state via 0x161 instead -- don't also send 0x362 suppress, it conflicts)
+    if self.frame % 5 == 0 and lka_steering and not (self.CP.flags & HyundaiFlags.CCNC):
       can_sends.append(hyundaicanfd.create_suppress_lfa(self.packer, self.CAN, CS.lfa_block_msg,
                                                         self.CP.flags & HyundaiFlags.CANFD_LKA_STEER_MSG_ALT))
 
     # LFA and HDA icons
-    if self.frame % 5 == 0 and (not lka_steering or lka_steering_long):
-      if ccnc_non_hda2:
+    # ccNC cars drive the cluster via 0x161/0x162 regardless of steering/long mode (LKA-steering
+    # + stock SCC included). Without this the outer gate excludes LKA-steering+stock-SCC cars and
+    # create_ccnc never runs (0x161/0x162/0x1b5 TX=0, and 0x362 LFA-suppress is sent instead).
+    if self.frame % 5 == 0 and (is_ccnc or not lka_steering or lka_steering_long):
+      if is_ccnc:
         can_sends.extend(hyundaicanfd.create_ccnc(self.packer, self.CAN, self.CP.openpilotLongitudinalControl, CC.enabled, CC.hudControl, CC.leftBlinker,
                                                   CC.rightBlinker, CS.msg_161, CS.msg_162, CS.msg_1b5, CS.is_metric, CS.out, CS.main_cruise_enabled,
                                                   self.lfa_icon))
