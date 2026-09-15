@@ -264,15 +264,12 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
       # ccNC pass-through msgs MUST be copied for ALL ccNC cars, including LKA-steering.
       # (An earlier `not CANFD_LKA_STEER_MSG` gate here skipped the copy for our car ->
       # msg_161/162/1b5 stayed {} -> create_ccnc transmitted all-zero 0x161 -> ADAS fault.)
-      # The car's 0x161 may arrive on a different bus than cp_cam (Bus.cam), so read from
-      # whichever parser actually captured it (non-zero payload), else vl stays all-zero.
-      def _ccnc_vl(name):
-        for p in (cp_cam, cp):
-          v = p.vl[name]
-          if any(x != 0 for x in v.values()):
-            return copy.copy(v)
-        return copy.copy(cp_cam.vl[name])
-      self.msg_161, self.msg_162, self.msg_1b5 = _ccnc_vl("CCNC_0x161"), _ccnc_vl("CCNC_0x162"), _ccnc_vl("FR_CMR_03_50ms")
+      # The car sends these on ECAN (Bus.pt = cp) only, so copy straight from cp. They are
+      # NOT on cp_cam (Bus.cam) — see get_can_parsers_canfd: registering them there would time
+      # out the cam parser and invalidate carState.
+      self.msg_161 = copy.copy(cp.vl["CCNC_0x161"])
+      self.msg_162 = copy.copy(cp.vl["CCNC_0x162"])
+      self.msg_1b5 = copy.copy(cp.vl["FR_CMR_03_50ms"])
       if not self.CP.flags & HyundaiFlags.CANFD_LKA_STEER_MSG:
         self.cruise_info = copy.copy((cp_cam if self.CP.flags & HyundaiFlags.CANFD_CAMERA_SCC else cp).vl["SCC_CONTROL"])
     ret.leftBlinker, ret.rightBlinker = self.update_blinker_from_lamp(50, cp.vl["BLINKERS"][left_blinker_sig],
@@ -342,15 +339,15 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
         # this message is 50Hz but the ECU frequently stops transmitting for ~0.5s
         ("CRUISE_BUTTONS", 1)
       ]
-    # ccNC pass-through msgs (0x161/0x162/0x1b5): the car transmits these on ECAN (Bus.pt) —
-    # confirmed from in-car logs (src=1) and by the live parser. They are already in `msgs`
-    # above, so Bus.pt must NOT list them again (CANParser rejects duplicate addresses:
-    # "Duplicate Message Check: 353"). The cam parser also registers them so the _ccnc_vl
-    # fallback in update() can read cp_cam.vl[...] without KeyError (it will be all-zero there).
-    ccnc_msgs = [("CCNC_0x161", 20), ("CCNC_0x162", 20), ("FR_CMR_03_50ms", 20)] if (CP.flags & HyundaiFlags.CCNC) else []
+    # ccNC pass-through msgs (0x161/0x162/0x1b5) are transmitted by the car ONLY on ECAN
+    # (Bus.pt) — confirmed by a raw live bus dump (src=1 only, never src=2). They are already
+    # in `msgs` above, so they ride the Bus.pt parser. The cam parser MUST stay empty for these:
+    # registering a message on a bus where it never arrives makes that parser time out, which
+    # sets carState.canValid=False -> canError -> the cluster "Check Driver Assistance" fault
+    # (surfaced confusingly as the "Unknown Vehicle Variant" alert).
     return {
       Bus.pt: CANParser(DBC[CP.carFingerprint][Bus.pt], msgs, CanBus(CP).ECAN),
-      Bus.cam: CANParser(DBC[CP.carFingerprint][Bus.pt], ccnc_msgs, CanBus(CP).CAM),
+      Bus.cam: CANParser(DBC[CP.carFingerprint][Bus.pt], [], CanBus(CP).CAM),
     }
 
   def get_can_parsers(self, CP, CP_SP):
