@@ -220,16 +220,26 @@ class CarController(CarControllerBase, EsccCarController, LeadDataCarController,
     # create_ccnc never runs (0x161/0x162/0x1b5 TX=0, and 0x362 LFA-suppress is sent instead).
     if self.frame % 5 == 0 and (is_ccnc or not lka_steering or lka_steering_long):
       if is_ccnc:
+        # === CCNC_COLLISION_DISABLE (2026-09-15) ===
+        # ccNC 0x161/0x162/0x1b5 injection is DISABLED. Wire evidence (route 00000021) proved the
+        # car's OWN ADAS/camera module transmits 0x161/0x162 on bus 1 at ~19Hz the entire drive.
+        # Our injection put a SECOND transmitter of the same IDs on the same bus -> the car detects
+        # a duplicate/conflicting cluster message and faults its driver-assistance suite
+        # ("Check Driver Assistance system" + coffee mug). Lateral-only steering rides on 0x110 and
+        # does not require ccNC. To restore: uncomment the block below (and pair it with suppressing
+        # the car's own module, e.g. camera relay split, or the collision returns). Delete this whole
+        # marker block once confirmed permanently unneeded. Search key: CCNC_COLLISION_DISABLE.
+        pass
         # A ccNC bug must never kill the card daemon — steering (0x110) has to survive.
         # (A KeyError here previously crashed card, killing ALL CAN output.)
-        try:
-          can_sends.extend(hyundaicanfd.create_ccnc(self.packer, self.CAN, self.CP.openpilotLongitudinalControl, CC.enabled, CC.hudControl, CC.leftBlinker,
-                                                    CC.rightBlinker, CS.msg_161, CS.msg_162, CS.msg_1b5, CS.is_metric, CS.out, CS.main_cruise_enabled,
-                                                    self.lfa_icon))
-        except Exception as e:
-          if not hasattr(self, '_ccnc_err_logged'):
-            self._ccnc_err_logged = True
-            print(f"[card] create_ccnc failed (ccNC disabled, steering continues): {e!r}\n{traceback.format_exc()}", flush=True)
+        # try:
+        #   can_sends.extend(hyundaicanfd.create_ccnc(self.packer, self.CAN, self.CP.openpilotLongitudinalControl, CC.enabled, CC.hudControl, CC.leftBlinker,
+        #                                             CC.rightBlinker, CS.msg_161, CS.msg_162, CS.msg_1b5, CS.is_metric, CS.out, CS.main_cruise_enabled,
+        #                                             self.lfa_icon))
+        # except Exception as e:
+        #   if not hasattr(self, '_ccnc_err_logged'):
+        #     self._ccnc_err_logged = True
+        #     print(f"[card] create_ccnc failed (ccNC disabled, steering continues): {e!r}\n{traceback.format_exc()}", flush=True)
       else:
         can_sends.append(hyundaicanfd.create_lfahda_cluster(self.packer, self.CAN, CC.enabled, self.lfa_icon))
 
