@@ -208,9 +208,13 @@ class CarController(CarControllerBase, EsccCarController, LeadDataCarController,
     # steering control
     can_sends.extend(hyundaicanfd.create_steering_messages(self.packer, self.CP, self.CAN, CC.enabled, apply_steer_req, apply_torque, self.lkas_icon))
 
-    # prevent LFA from activating on LKA steering cars by sending "no lane lines detected" to ADAS ECU
-    # (ccNC cars drive LFA state via 0x161 instead -- don't also send 0x362 suppress, it conflicts)
-    if self.frame % 5 == 0 and lka_steering and not (self.CP.flags & HyundaiFlags.CCNC):
+    # prevent LFA from activating on LKA steering cars by sending "no lane lines detected" to ADAS ECU.
+    # NOTE (2026-09-15, pairs with CCNC_COLLISION_DISABLE): ccNC injection is now disabled, so this car
+    # must send 0x362 like a normal LKA-steering car. The old gate `and not CCNC` skipped 0x362 for ccNC
+    # cars on the theory that 0x161 drives LFA state instead -- but with ccNC off that left us sending
+    # ONLY 0x110 and the car faulted ("Check Driver Assistance"). The only no-fault drive on record
+    # (route 0000001f) sent 0x362; every faulting drive omitted it. So send 0x362 for all LKA-steering.
+    if self.frame % 5 == 0 and lka_steering:
       can_sends.append(hyundaicanfd.create_suppress_lfa(self.packer, self.CAN, CS.lfa_block_msg,
                                                         self.CP.flags & HyundaiFlags.CANFD_LKA_STEER_MSG_ALT))
 
